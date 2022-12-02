@@ -1,4 +1,4 @@
-# Dedici Backend Bundles
+# Dedici Backend Main
 
 This package is a service that manages discussion circles and it was made in context of the development of the [Dediĉi_code project (fr)](https://www.dedici.org/dedici_code).
 
