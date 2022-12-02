@@ -1,0 +1,76 @@
+# Stages
+
+stages:
+    - build
+    - push
+  
+# Job templates
+
+.docker_job:
+  image: docker:19.03.12
+  services:
+    - docker:19.03.12-dind
+.build_job:
+  extends: .docker_job
+  stage: build
+.push_job:
+  extends: .docker_job
+  stage: push
+
+# Variables
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+
+# Step scripts
+
+before_script:
+  - echo -n $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+
+# Build
+
+build:
+  extends: .build_job
+  interruptible: true
+  script:
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 700 ~/.ssh/id_rsa
+    - docker pull $CI_REGISTRY_IMAGE:latest || true
+    - >
+      docker build
+      --cache-from $CI_REGISTRY_IMAGE:latest
+      --build-arg SSH_PRIVATE_KEY="$(cat ~/.ssh/id_rsa)"
+      --build-arg GIT_URL=$CI_REPOSITORY_URL
+      --build-arg GIT_TARGET=$CI_COMMIT_SHA
+      --tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+      .
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+
+# Push
+
+push_latest:
+  extends: .push_job
+  script:
+    - docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE:latest
+    - docker push $CI_REGISTRY_IMAGE:latest
+
+push_branch:
+  extends: .push_job
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+  script:
+    - docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE:$CI_COMMIT_BRANCH
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_BRANCH
+      
+push_tag:
+  extends: .push_job
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  script:
+    - docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
